@@ -1,0 +1,167 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+/*
+ * Copyright (c) Yurii Yevdokimov
+ * Released under the CC BY-NC-SA 4.0
+ */
+var app = require('../app');
+var debug = require('debug')('hohdemonodejs:server');
+var http = require('http');
+//var https=require("https");
+var fs=require("fs");
+var sockets=[];
+const socketioJwt   = require('socketio-jwt');
+var User=require("../models/user");
+var port=process.env.PORT||8080;
+app.set('port', port);
+//app.set('secPort',port);
+/*var options = {
+  key: fs.readFileSync(__dirname+'/private.key'),
+  cert: fs.readFileSync(__dirname+'/certificate.pem')
+};*/
+
+
+
+/**
+ * Create HTTPS server.
+ */
+
+var server = http.createServer(app);
+
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+
+server.listen(port);
+server.on('error', onError);
+server.on('listening', onListening);
+var io=require('socket.io')(server)
+
+
+io.use(socketioJwt.authorize({
+  secret: '12345-67890-09876-54321',
+  handshake: true,
+  auth_header_required: true
+}));
+io.on('connection', (socket) => {
+  console.log('a user connected');
+  console.log(socket.decoded_token);
+  sockets[socket.decoded_token._id]=socket.id;
+  socket.on('disconnect', () => {
+    console.log('user disconnected');
+  });
+
+  socket.on("send",(receiver,message)=>{
+    socket.emit('incMessage',message);
+    const receiverId=sockets[receiver._id];
+    socket.to(receiverId).emit('incMessage',message);
+
+    User.findById(socket.decoded_token._id).then(user=>{
+      if (user)
+      {
+        user.messages.push(message);
+        user.save().then((res)=>{
+          
+       
+
+
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.json(res);
+    }, (err) => {
+        console.log(err);
+        next(err)}
+        )
+    .catch((err) => {
+        console.log(err);
+        next(err)}
+        );
+      }
+    })
+
+    User.findById(receiver._id).then(user=>{
+      if (user)
+      {
+        user.messages.push(message);
+        user.save().then((res)=>{
+          
+       
+
+
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json');
+        res.json(res);
+    }, (err) => {
+        console.log(err);
+        next(err)}
+        )
+    .catch((err) => {
+        console.log(err);
+        next(err)}
+        );
+      }
+    })
+ 
+    
+ 
+  });
+
+});
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  var bind = typeof port === 'string'
+    ? 'Pipe ' + port
+    : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening() {
+  var addr = server.address();
+  var bind = typeof addr === 'string'
+    ? 'pipe ' + addr
+    : 'port ' + addr.port;
+  debug('Listening on ' + bind);
+}
